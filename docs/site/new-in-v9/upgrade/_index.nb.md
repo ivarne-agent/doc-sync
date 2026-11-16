@@ -1,0 +1,326 @@
+---
+title: Slik oppgraderer du appen fra v8 til v9
+linktitle: Oppgradere fra v8
+description: Slik oppgraderer du en Altinn-app fra v8 til v9 med studioctl.
+weight: 10
+toc: true
+tags: [Reviewed]
+---
+
+Vi anbefaler at du oppgraderer appen med kommandolinjeverktøyet studioctl. `studioctl app upgrade` gjør mesteparten av jobben for deg. Verktøyet går gjennom appen og endrer de filene som trenger det.
+
+## Dette gjør du som tjenesteeier
+
+Det er som regel utvikleren eller leverandøren din som kjører oppgraderingen. Som tjenesteeier bør du
+
+- avtale med dem når appen skal oppgraderes
+- lese [Dette endrer oppgraderingen i appen din](#dette-endrer-oppgraderingen-i-appen-din) og vurdere hva endringene betyr for brukerne
+- teste appen grundig i testmiljøet før dere publiserer den i produksjon
+
+## 1. Sett opp studioctl og hent appen
+
+Har du ikke appen på maskinen din, følger du [veiledningen for å sette opp utviklingsmiljøet på egen maskin]({{< relref "/altinn-studio/v9/getting-started/studioctl" >}}). Der installerer du studioctl, logger inn og henter appen.
+
+Har du appen på maskinen fra før, trenger du ikke hente den på nytt. Har du ikke studioctl ennå, [installerer du verktøyet]({{< relref "/altinn-studio/v9/getting-started/studioctl#installer-studioctl" >}}). Har du studioctl fra før, oppdaterer du til siste versjon:
+
+```bash
+studioctl self update
+```
+
+## 2. Gjør appen klar
+
+Slik gjør du appen klar før du oppgraderer:
+
+- Commit alt du har jobbet med. Oppgraderingen stopper hvis repositoriet har endringer du ikke har committet.
+- Lukk appen i editoren din, for eksempel Visual Studio eller Visual Studio Code.
+- Lag en egen branch, slik at du har et punkt å gå tilbake til hvis du vil angre oppgraderingen.
+- Kontroller at du har .NET SDK 11 eller nyere. Kjør `dotnet --version` i rotmappen til appen. Bruker du en forhåndsversjon av .NET 11, må den være 11.0.100-rc.2 eller nyere. Har appen en `global.json` som velger en eldre versjon, må du endre den. Oppgraderingen stopper og sier fra hvis versjonen er for gammel.
+
+## 3. Kjør oppgraderingen
+
+Gå til rotmappen i prosjektet ditt og kjør:
+
+```bash
+studioctl app upgrade v9
+```
+
+v9 er standardvalget, så `studioctl app upgrade` gjør det samme.
+
+Verktøyet går gjennom appen steg for steg og skriver ut hva det endrer. Les gjennom utskriften. Der oppgraderingen ikke klarer å gjøre en endring selv, sier den fra om hva du må ordne manuelt.
+
+## 4. Kontroller at appen fungerer
+
+Start den lokale testplattformen og kjør appen:
+
+```bash
+studioctl env up
+studioctl app run
+```
+
+Fyll ut skjemaet, gå gjennom hele prosessen og se at PDF-en og kvitteringen blir slik du forventer. Se [veiledningen for å jobbe med tjenesten lokalt på egen maskin]({{< relref "/altinn-studio/v9/getting-started/development/localtest" >}}) hvis du trenger hjelp til det lokale oppsettet.
+
+## Dette endrer oppgraderingen i appen din
+
+Oppgraderingen tar seg av endringene nedenfor. Noen av dem endrer hvordan appen ser ut eller oppfører seg, så les gjennom dem før du publiserer.
+
+### Egne stilark og skript får nye plasseringer
+
+Har du lagt til egne stilark eller skript i `Index.cshtml`? Se [slik flytter oppgraderingen eksisterende CSS- og JavaScript-tilpasninger]({{< relref "/altinn-studio/v9/develop-a-service/look-and-feel/custom-css-js#oppgrader-til-v9-med-eksisterende-tilpasninger" >}}).
+
+### UI-mappen følger nå prosessen
+
+Tidligere hadde `App/ui` én mappe per layoutsett, med sidene i undermappen `layouts`. Filen `layout-sets.json` koblet layoutsettet til steget i prosessen. Den koblingen så du ellers bare igjen i URL-en:
+
+```text
+https://ttd.apps.tt02.altinn.no/ttd/rbi-demo-v9/#/instance/51757388/769c64af-0c52-4db6-839c-36f8284ea1d6/Task_1/Side1
+```
+
+Etter oppgraderingen heter hver mappe under `App/ui` det samme som oppgaven i prosessen, og sidene ligger fortsatt under `layouts`:
+
+```
+App/
+  ui/
+    Task_1/
+      layouts/
+        Side1.json
+        Side2.json
+      Settings.json
+    Task_2/
+      layouts/
+        Side1.json
+      Settings.json
+```
+
+Mappestrukturen viser dermed selv hvilket skjema som hører til hvilket steg. Da trenger ikke appen `layout-sets.json` lenger, og oppgraderingen sletter filen.
+
+Se [innstillinger for sider og oppgaver](/nb/altinn-studio/v9/develop-a-service/look-and-feel/ui-settings/) for felles innstillinger og overstyringer per oppgave.
+
+### Navigasjonskomponenter bruker egne valideringsinnstillinger
+
+I v9 har valideringsregler på `NavigationButtons`, `NavigationBar` og `CustomButton`-handlinger i layoutfilen forrang framfor reglene for siden, oppgaven og appen. Dette kan endre når brukeren får fortsette, også bakover. Oppgraderingen beholder innstillingene og gir TODO-er når navigeringen kan endre seg eller trenger manuell vurdering. Gå gjennom TODO-ene og test berørte knapper og handlinger.
+
+Se [hvordan valideringsreglene virker ved sidebytte]({{< relref "/altinn-studio/v9/develop-a-service/look-and-feel/sider/navigasjon#angi-validering-ved-sidebytte" >}}).
+
+### Returknapper følger valideringen for Neste
+
+**Tilbake til oppsummering** og **Tilbake til side** på `NavigationButtons` bruker nå valideringsregelen for **Neste** når du ikke har satt `validateOnBackToSummary`. Feil som tidligere ikke hindret navigeringen, kan derfor stoppe returen.
+
+Test retur etter redigering fra både oppsummeringer og lenker. Sett `validateOnBackToSummary` med `"page": "current"` og `"show": []` på NavigationButtons hvis knappen fortsatt skal tillate retur uten å vise nye valideringsfeil. Du kan også sette regelen på redigeringssiden, oppgaven eller appen. En regel på et mer spesifikt nivå har forrang, også når den gjelder **Neste**.
+
+Hvis redigeringen viser tidligere skjulte sider mellom redigeringssiden og retursiden, eller gjør retursiden utilgjengelig, fjerner appen returknappen. Brukeren fortsetter da med vanlig sidenavigering.
+
+Se [validering ved retur]({{< relref "/altinn-studio/v9/develop-a-service/look-and-feel/sider/navigasjon#validering-ved-retur-til-oppsummering-eller-en-annen-side" >}}) for prioritetsrekkefølge og eksempler.
+
+### URL-er bruker ikke lenger hash-ruting
+
+I v8 begynte stien inne i appen med `#/`:
+
+```
+https://ttd.apps.tt02.altinn.no/ttd/rbi-demo-v9/#/instance/51757388/769c64af-0c52-4db6-839c-36f8284ea1d6/Task_1/Side1
+```
+
+I v9 ligger den samme stien direkte i URL-en:
+
+```text
+https://ttd.apps.tt02.altinn.no/ttd/rbi-demo-v9/instance/51757388/769c64af-0c52-4db6-839c-36f8284ea1d6/Task_1/Side1
+```
+
+Appen omdirigerer gamle lenker med `#/` til den nye adressen. Bruk det nye formatet når du lager lenker til appen. Se også [språkvalg](/nb/altinn-studio/v9/develop-a-service/look-and-feel/tekster/oversettelse/#hvordan-appen-velger-språk) for hvordan du åpner appen på et bestemt språk med `lang`-parameteren.
+
+### PDF-en har fått sitt eget steg i prosessen
+
+Tidligere laget appen PDF-kvitteringen samtidig som brukeren gikk ut av et utfyllingssteg. PDF-en var altså en del av det steget. Feilet PDF-en, kunne hele innsendingen feile, og det var ikke lett å starte prosessen på nytt fra punktet som gikk galt.
+
+Etter oppgraderingen har appen din en egen PDF-oppgave i prosessen. Det gjør både feilhåndtering og ny kjøring enklere, og du får flere valg:
+
+- Du kan fjerne PDF-oppgaven hvis du ikke vil ha en PDF.
+- Du kan flytte PDF-oppgaven helt bakerst i større prosesser, når PDF-en skal inneholde data fra flere steg.
+
+Standardoppsettet lager en PDF som oppsummerer skjemautfyllingen, ut fra skjemaoppsettet ditt. Du kan overstyre dette og bestemme selv hvordan appen lager PDF-en. Se [veiledningen for å sette opp PDF-generering som systemoppgave]({{< relref "/altinn-studio/v9/develop-a-service/process/pdf" >}}).
+
+{{% notice warning %}}
+**PDF-en kan se annerledes ut etter oppgraderingen.** Tidligere kunne du sette funksjonsflagget `BetaPDFenabled` for å la `Summary2`-komponenten lage PDF-en automatisk. Dette er nå standardinnstillingen, og flagget forsvinner. Har du ikke tilpasset utseendet på PDF-en selv, kan den derfor se annerledes ut.
+
+V9 støtter i tillegg egenskapen `pageBreak` på `Summary2`-komponenter. Det gjorde ikke app-frontend v4. Se etter om PDF-en har fått flere sideskift enn du ønsker.
+{{% /notice %}}
+
+### PDF av underskjema bruker UI-mappen til underskjemaet
+
+En `subformPdf`-oppgave peker nå på UI-mappen til underskjemaet med `subformUiFolder`, i stedet for `subformComponentId` og `subformDataTypeId`. Oppgaven trenger ingen UI-mappe selv. Oppgraderingen skriver om oppgaven og fjerner den skjulte kopien av komponenten **Tabell for underskjema** fra UI-mappen til oppgaven. Resten av mappen rydder den slik den gjør for alle systemoppgaver. Se [Systemoppgaver viser sidene i UI-mappen mens de kjører](#systemoppgaver-viser-sidene-i-ui-mappen-mens-de-kjører).
+
+Oppgraderingen legger også til `"type": "subform"` og en manglende `defaultDataType` i `Settings.json` for underskjemaet. Mangler kopien, finnes den flere ganger, eller peker den ikke på en UI-mappe, lar oppgraderingen oppgaven stå uendret og lister den som en oppgave du må gjøre selv. Da bytter du ut innstillingene med `subformUiFolder` for hånd, og fjerner komponentkopien. Sjekk også at `Settings.json` for underskjemaet har `"type": "subform"`, og at `defaultDataType` er datatypen fra `subformDataTypeId`.
+
+PDF-ene har metadatafeltet `subformUiFolder` i stedet for `subformComponentId`. Leser et system det gamle feltet, må det lese `subformUiFolder` i stedet. Se [PDF-generering for underskjema]({{< relref "/altinn-studio/v9/develop-a-service/look-and-feel/subform/subform-pdf" >}}).
+
+### Systemoppgaver viser sidene i UI-mappen mens de kjører
+
+I v9 viser appen sidene i `pages.order` for en systemoppgave fra prosessen kommer til oppgaven og til neste steg står på skjermen. Sidene er skrivebeskyttet. Feiler oppgaven for godt, for eksempel når den har brukt opp forsøkene eller ventetiden sin, viser appen den innebygde siden **Noe gikk galt** i stedet. Lister mappen ingen sider, ser brukeren den innebygde lastevisningen. Apper fra v8 kan ha sider i slike mapper som aldri var ment for brukere som venter på oppgaven.
+
+Oppgraderingen gjør dette for deg, i UI-mappen til alle systemoppgaver:
+
+- Den fjerner siden «Noe gikk galt», som Altinn Studio laget for PDF-oppgaver i v8, med knapper for å prøve igjen og gå tilbake. Den tar siden ut av `pages.order` og sletter layoutfilen, men bare når siden er nøyaktig slik Altinn Studio laget den. `pdfLayoutName` beholder den.
+- Den fjerner sider uten komponenter på samme måte. En slik side ville vist brukeren en tom side, for eksempel når den bare hadde den skjulte kopien av **Tabell for underskjema**.
+- Står mappen igjen med bare `Settings.json`, uten sider og uten `pdfLayoutName`, sletter den hele mappen. Appen bruker ingenting i en slik mappe.
+
+PDF-oppgavene oppgraderingen legger til, får en tom `pages.order` og ingen venteside. Det gjelder også når oppgraderingen kopierer hele UI-mappen fra dataoppgaven for å beholde PDF-en.
+
+Dette må du se på selv:
+
+- **Andre sider i en PDF-oppgave.** Har du endret siden Altinn Studio laget, eller lister mappen andre sider, lar oppgraderingen dem stå, og du får en oppgave du må gjøre selv. Sidene blir aldri en del av PDF-en. Fjern dem fra `pages.order` hvis de ikke er ment for brukere som venter på PDF-en, og behold `pdfLayoutName`.
+- **Sider i andre systemoppgaver.** Lister UI-mappen til en annen systemoppgave andre sider i `pages.order`, for eksempel en eFormidling-, Fiks Arkiv-, underskjema-PDF- eller egendefinert oppgave, får du en oppgave du må gjøre selv. Oppgraderingen lar sidene stå. Behold dem bare hvis de er ment for brukere som venter på oppgaven. Ellers tømmer du `pages.order`.
+
+Ventesiden som forhåndsversjonene av v9 laget, regner oppgraderingen som en side du har laget selv. Den gir altså også en oppgave du må gjøre selv.
+
+Se [Hva brukeren ser mens en systemoppgave kjører]({{< relref "/altinn-studio/v9/develop-a-service/process/service-tasks/visning" >}}).
+
+### eFormidling har fått sitt eget steg i prosessen
+
+Tidligere sendte appen eFormidling-meldingen når prosessen gikk ut av oppgaven i `sendAfterTaskId`. Oppsettet lå i `eFormidling`-seksjonen i `applicationmetadata.json`, og flagget `EnableEFormidling` i `appsettings` slo sendingen av og på. I v9 er sendingen en egen systemoppgave i prosessen, og all konfigurasjonen ligger på den oppgaven.
+
+Oppgraderingen gjør dette for deg:
+
+- Den legger til en eFormidling-oppgave rett etter oppgaven i `sendAfterTaskId`, med konfigurasjonen fra `applicationmetadata.json`.
+- Den gjør `EnableEFormidling` om til `<altinn:disabled>` på oppgaven. Var flagget ulikt i ulike miljøer, får oppgaven ett `<altinn:disabled env="…">` for hvert miljø der sendingen var slått av.
+- Den fjerner `eFormidling`-seksjonen fra `applicationmetadata.json` og `EnableEFormidling` fra `appsettings`-filene.
+- Den skriver om registreringen i `Program.cs` fra `AddEFormidlingServices<...>(config)` til `AddEFormidling().WithMetadata<...>()`, med `WithReceivers<...>()` hvis appen har sin egen mottakerklasse.
+- Den gir `GetEFormidlingReceivers` i mottakerklassen den nye parameteren `receiverFromConfig`, som er mottakeren fra `<altinn:receiver>` på oppgaven.
+
+Dette må du se på selv:
+
+- **Sendingen kan være slått av.** Var `EnableEFormidling` ikke slått på i noe miljø, sendte appen aldri noe. Den nye oppgaven er da slått av med `<altinn:disabled>`. Fjern elementet når du vil begynne å sende.
+- **`serviceId` forsvinner.** Den har ingen erstatning i v9. Tjenesten hentes fra mottakerens kapabiliteter.
+- **Kode som bruker de gamle grensesnittene.** Oppgraderingen lister opp kall til `SendEFormidlingShipment(instance)` og kode som leser `EnableEFormidling`, men skriver dem ikke om.
+- **Et tilbakemeldingssteg etter systemoppgaven.** I v8 la noen apper til en `feedback`-oppgave etter eFormidling for å vente på svar. I v9 viser appen en lastevisning selv mens en systemoppgave jobber eller venter. Oppgraderingen lister opp slike `feedback`-oppgaver, men fjerner dem ikke. Fjern oppgaven hvis den bare var der for å vente.
+
+Mangler `sendAfterTaskId`, eller klarer ikke oppgraderingen å sette inn oppgaven, lar den `applicationmetadata.json` stå urørt og ber deg legge til oppgaven selv. Se [veiledningen for eFormidling]({{< relref "/altinn-studio/v9/receive-data/eFormidling" >}}) for hele oppsettet.
+
+### Regelfilene forsvinner
+
+Vi har lenge anbefalt å sette opp dynamikk i skjemaer med dynamiske uttrykk i JSON-filene, men vi har fortsatt støttet de eldre reglene som er skrevet i JavaScript. Den støtten forsvinner i v9.
+
+Oppgraderingen skriver reglene om til dynamiske uttrykk eller C#-kode og sletter regelfilene der det lykkes. Klarer den ikke å konvertere en regel, beholder den regelfilene og sier fra, og da må du bygge dynamikken selv. Se [introduksjonen til uttrykksspråket]({{< relref "/altinn-studio/v9/develop-a-service/expressions" >}}) hvis du trenger å skrive om en regel.
+
+{{% notice warning %}}
+Gå gjennom uttrykkene oppgraderingen har laget, og test at dynamikken i skjemaet virker som den skal.
+{{% /notice %}}
+
+### Egendefinerte systemoppgaver trenger nye svarverdier
+
+Har appen din en egen systemoppgave, altså en C#-klasse som implementerer `IServiceTask`, ordner oppgraderingen én del av jobben og lar deg gjøre resten selv.
+
+Oppgraderingen bytter navnerommet for deg, fra `Altinn.App.Core.Internal.Process.ProcessTasks.ServiceTasks` til `Altinn.App.Core.Features.Process`.
+
+Svarverdiene må du skrive om selv. `ServiceTaskErrorHandling` og `ServiceTaskErrorStrategy` forsvinner, sammen med `Failed(...)`, `FailedAbortProcessNext()` og `FailedContinueProcessNext(...)`. Oppgraderingen lister opp stedene i koden den fant, men lar valget stå til deg — hva en feil skal føre til, er et faglig spørsmål og ikke en mekanisk erstatning:
+
+| Slik svarte oppgaven i v8 | Slik svarer den i v9 |
+| --- | --- |
+| `FailedAbortProcessNext()` | `FailedPermanent("melding")` når feilen ikke retter seg selv. Kan den gå bort av seg selv, for eksempel et system som er nede akkurat nå, bruker du `FailedRetryable("melding")`, så prøver plattformen på nytt før den gir opp. |
+| `FailedContinueProcessNext("reject")` | `Success("reject")`. Oppgaven er ferdig, og prosessen går videre med handlingen du oppgir. |
+| `Failed(new ServiceTaskErrorHandling(...))` | Velg blant svarene over, ut fra hva strategien din faktisk skulle oppnå. |
+
+I tillegg kjører plattformen systemoppgaver på en ny måte i v9. I v8 kjørte oppgaven én gang, som en del av `process/next`. Nå kjører den for seg: plattformen prøver på nytt hvis noe utenfor appen svikter, og kan holde prosessen i steget mens oppgaven venter på svar. Det stiller et nytt krav til koden: oppgaven må tåle å kjøre flere ganger uten å sende samme melding eller opprette samme sak to ganger.
+
+Se [Lage en egendefinert systemoppgave]({{< relref "/altinn-studio/v9/develop-a-service/process/service-tasks/custom" >}}) for hele oppsettet, og [Systemoppgaver med flere steg]({{< relref "/altinn-studio/v9/develop-a-service/process/service-tasks/flere-steg" >}}) hvis oppgaven sender noe og venter på svar.
+
+## Breaking changes
+
+### Vi har flyttet egendefinerte oppgave-hooker, og de har fått ny funksjonsmåte
+
+Hvis appen din har en klasse som implementerer `IProcessTaskStart`, `IProcessTaskEnd` eller `IProcessTaskAbandon`, det vil si kode som kjører når en oppgave starter, avsluttes eller forlates, må du migrere den manuelt. Systemoppgavene over er med i oppgraderingen, men disse tre grensesnittene har vi fjernet uten en overgangsperiode med kompileringsadvarsler. Koden slutter rett og slett å kompilere til du har gjort om på den.
+
+Bruk de nye grensesnittene i `Altinn.App.Core.Features.Process` i stedet:
+
+| Gammelt grensesnitt | Nytt grensesnitt |
+| -------------------- | ----------------------- |
+| `IProcessTaskStart` | `IOnTaskStartingHandler` |
+| `IProcessTaskEnd` | `IOnTaskEndingHandler` |
+| `IProcessTaskAbandon` | `IOnTaskAbandoningHandler` |
+
+Utover navnet er det tre praktiske forskjeller du må kode mot:
+
+- **Hooken avgjør selv hvilken oppgave den gjelder for.** Før kjørte hver registrerte handler for *alle* oppgaver i prosessen, og koden måtte selv sjekke `taskId`. Nå implementerer hooken `ShouldRunForTask(string taskId)`, og bare handleren som svarer `true` for gjeldende oppgave, kjører.
+- **Hooken kjører som et steg i arbeidsflytmotoren**, akkurat som systemoppgavene over. Hvis det oppstår feil, kan det hende at den blir forsøkt kjørt på nytt automatisk — implementasjonen må altså være idempotent. I stedet for å kaste unntak ved feil returnerer du et `HandlerResult` (et eget resultat for hooker, ikke å forveksle med `ServiceTaskResult` som brukes av systemoppgaver): `HandlerResult.Success()`, `HandlerResult.FailedRetryable("melding")` for en forbigående feil, eller `HandlerResult.FailedPermanent("melding")` for en feil som trenger en rettelse.
+- **Instansdata leses og endres via `IInstanceDataMutator`** i stedet for et rått `Instance`-objekt. Kontekstobjektet hooken mottar (`OnTaskStartingContext` og tilsvarende for de to andre) gir deg oppgave-ID-en og en mutator. Instansen finner du i `context.InstanceDataMutator.Instance`, og endringer du gjør gjennom mutatoren, lagres automatisk når hooken fullfører uten feil.
+
+I tillegg mister start-hooken `prefill`-parameteren. Hvis du tidligere har brukt prefill-data i `IProcessTaskStart.Start`, må du flytte den logikken til `IInstantiationProcessor.DataCreation`, som fortsatt mottar prefill og er upåvirket av denne endringen.
+```csharp
+// Før (v8)
+public class MyTaskStartHandler : IProcessTaskStart
+{
+    public Task Start(string taskId, Instance instance, Dictionary<string, string>? prefill)
+    {
+        if (taskId != "Task_1")
+        {
+            return Task.CompletedTask;
+        }
+
+        // Egendefinert logikk her
+
+        return Task.CompletedTask;
+    }
+}
+
+// Etter (v9)
+public class MyTaskStartHandler : IOnTaskStartingHandler
+{
+    public bool ShouldRunForTask(string taskId) => taskId == "Task_1";
+
+    public async Task<HandlerResult> Execute(OnTaskStartingContext context)
+    {
+        // Egendefinert logikk her, f.eks. context.InstanceDataMutator
+
+        return HandlerResult.Success();
+    }
+}
+```
+
+`IOnTaskEndingHandler` og `IOnTaskAbandoningHandler` følger samme mønster, med `Execute(OnTaskEndingContext)` og `Execute(OnTaskAbandoningContext)`. Registrering i `Program.cs` er uendret bortsett fra grensesnittnavnet: `services.AddTransient<IOnTaskStartingHandler, MyTaskStartHandler>();`
+
+De nye hookene gjør også at du kan velge å overstyre arbeidsflytmotorens standard tidsavbrudd og strategi for å prøve igjen for steget, med egenskapen `StepOptions`. Det er en ny mulighet, uten noe tilsvarende i versjon 8, så det er ikke noe du trenger å sette for å migrere.
+
+{{% notice warning %}}
+Bare én matchende handler er tillatt per oppgave. Svarer to registrerte handlere av samme type (for eksempel to `IOnTaskStartingHandler`) `true` for samme oppgave i `process.bpmn`, starter ikke appen. Hadde du før flere handler-klasser rettet mot ulike oppgaver, pass på at `ShouldRunForTask`-implementasjonene deres ikke overlapper — virket to av dine gamle handlere på samme oppgave, slå dem sammen til én.
+{{% /notice %}}
+
+### Vi har fjernet `IProcessEnd`
+
+Hvis appen din har en klasse som implementerer `IProcessEnd`, må du flytte koden til en av disse hookene i `Altinn.App.Core.Features.Process`:
+
+| Når koden skal kjøre | Nytt grensesnitt |
+| --- | --- |
+| etter at prosessen er avsluttet og lagret | `IOnProcessEndedHandler` |
+| før prosessen avsluttes, slik at en feil kan stoppe avslutningen | `IOnTaskEndingHandler` for den siste oppgaven |
+
+`studioctl app upgrade v9` viser hvilke klasser og registreringer du må flytte, men gjør ikke om koden for deg.
+
+`IOnProcessEndedHandler` har samme `Execute` og `HandlerResult` som oppgave-hookene over, men kjører én gang for hele instansen. Den har ingen `ShouldRunForTask`, og konteksten har ingen oppgave-ID. `Execute` får et kontekstobjekt i stedet for `Instance` og listen med hendelser, og du leser og endrer data gjennom `context.InstanceDataMutator` i stedet for `IDataClient` eller `IInstanceClient`. Koden kjører i arbeidsflytmotoren, ikke i forespørselen fra brukeren, så `HttpContext` gir deg ikke brukerens språk eller pålogging. Du kan bare registrere én `IOnProcessEndedHandler`. Med flere starter ikke appen.
+
+Se [Prosess-hooks]({{< relref "/altinn-studio/v9/develop-a-service/reference/configuration/process/pre-post-hooks" >}}) for detaljene.
+
+### Vi har fjernet `process/completeProcess`
+
+Appen har ikke lenger endepunktet `PUT .../process/completeProcess`. Bruker systemet deres det til å avslutte en tilbakemeldingsoppgave når dere har behandlet innsendingen, kaller dere `PUT .../process/next` i stedet.
+
+### Vi har fjernet `data/{dataGuid}/validate`
+
+Appen har ikke lenger endepunktet `GET .../data/{dataGuid}/validate`. Bruk `GET .../instances/{instanceOwnerPartyId}/{instanceGuid}/validate` i stedet. Det godtar disse parameterne:
+
+- `onlyIncrementalValidators`: `true` kjører bare validatorene for inkrementell validering, `false` bare de andre. Uten parameteren kjører alle.
+- `ignoredValidators`: en kommaseparert liste med `ValidationSource` for validatorer som ikke skal kjøre.
+- `language`: språket på valideringsmeldingene.
+
+### Mindre endringer
+
+Oppgraderingen ordner disse endringene uten at du trenger å gjøre noe, men det er greit å kjenne til dem:
+
+- Komponenten `NavigationButtons` viser nå tilbake-knappen som standard. Tidligere måtte du slå den på selv. Oppgraderingen legger ikke til `"showBackButton": false` for deg, så vil du skjule knappen, må du sette det selv.
+- Komponenten `OrganisationLookup` heter nå `OrganizationLookup`.
+- Komponenten `Header` heter nå `Heading`.
+- Knappetekstene i `RepeatingGroup` har fått nye navn i camelCase under `textResourceBindings`, for eksempel `addButton` i stedet for `add_button`. Det gjelder `addButton`, `addButtonFull`, `saveButton`, `saveAndNextButton`, `editButtonOpen`, `editButtonClose`, `paginationNextButton`, `paginationBackButton`, `multipageNextButton` og `multipageBackButton`.
+- Appen merker nå alle felt som enten påkrevde eller valgfrie (se [Skjemaene er lettere å lese og fylle ut]({{< relref "/altinn-studio/v9/new-in-v9#skjemaene-er-lettere-å-lese-og-fylle-ut" >}})). Appen viser **Valgfritt** som standard, så oppgraderingen fjerner `"optionalIndicator": true` fra `labelSettings` i layoutfilene.
+- Oppgraderingen fjerner teksten `form_filler.required_description` fra tekstfilene, fordi appen ikke lenger viser banneret om påkrevde felt. Den fjerner også `form_filler.required_label` hvis verdien er `*`. Har dere skrevet en annen tekst der, beholder oppgraderingen den og gir en advarsel, slik at dere kan vurdere ordlyden.
+- Datamodellkoblingene i `PersonLookup` og `OrganizationLookup` har fått nye navn i camelCase, uten prefiksene `person_lookup_`, `organization_lookup_` og `organisation_lookup_`. I `PersonLookup` heter de nå `ssn`, `fullName`, `firstName`, `middleName` og `lastName`. Legg merke til at `person_lookup_name` har blitt til `fullName`. I `OrganizationLookup` heter de `orgnr` og `name`.
+
+## Neste steg
+
+Vil du vite mer om hva som ligger bak endringene, kan du lese [om bakgrunnen for v9]({{< relref "/altinn-studio/v9/new-in-v9" >}}).
