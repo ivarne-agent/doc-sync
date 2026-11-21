@@ -2,7 +2,8 @@ name: Docs sync
 
 on:
   schedule:
-    - cron: "7,37 * * * *"
+    # Once a day, at 04:23 UTC.
+    - cron: "23 4 * * *"
   workflow_dispatch:
     inputs:
       mode:
