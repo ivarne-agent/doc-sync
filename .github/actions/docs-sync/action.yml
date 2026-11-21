@@ -1,0 +1,99 @@
+name: Docs sync
+description: Replay commits that touch a folder in another repository since the last sync, and open a pull request with them
+inputs:
+  other-repo:
+    description: owner/name of the repository to sync from
+    required: true
+  other-branch:
+    description: Branch in the other repository
+    required: true
+  other-path:
+    description: Folder in the other repository
+    required: true
+  local-path:
+    description: Folder in this repository
+    required: true
+  mode:
+    description: sync replays new commits. reset-to-other makes the folder identical to the other repository's
+    default: sync
+  other-ref:
+    description: With reset-to-other, the commit to reset to. Defaults to the tip of the branch
+    default: ""
+  refs:
+    description: >-
+      What to do with issue references in replayed commit messages. qualify points them at the other repository,
+      neutralize stops GitHub from linking them or notifying anyone, keep leaves them
+    default: qualify
+  pr-branch:
+    description: Branch the pull request is opened from
+    default: docs-sync/incoming
+  token:
+    description: Token that opens the pull request
+    default: ${{ github.token }}
+outputs:
+  replayed:
+    description: Number of commits replayed
+    value: ${{ steps.sync.outputs.replayed }}
+  conflict:
+    description: The commit in the other repository that did not apply, or empty
+    value: ${{ steps.sync.outputs.conflict }}
+runs:
+  using: composite
+  steps:
+    - id: sync
+      shell: bash
+      env:
+        OTHER_REPO: ${{ inputs.other-repo }}
+        OTHER_BRANCH: ${{ inputs.other-branch }}
+        OTHER_PATH: ${{ inputs.other-path }}
+        LOCAL_PATH: ${{ inputs.local-path }}
+        MODE: ${{ inputs.mode }}
+        OTHER_REF: ${{ inputs.other-ref }}
+        REFS: ${{ inputs.refs }}
+      run: '"$GITHUB_ACTION_PATH/sync.sh"'
+
+    - name: Open or update the pull request
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        OTHER_REPO: ${{ inputs.other-repo }}
+        LOCAL_PATH: ${{ inputs.local-path }}
+        PR_BRANCH: ${{ inputs.pr-branch }}
+        BASE_BRANCH: ${{ github.ref_name }}
+        BASE_SHA: ${{ steps.sync.outputs.base }}
+        CONFLICT: ${{ steps.sync.outputs.conflict }}
+      run: |
+        head=$(git rev-parse HEAD)
+        if [ "$head" != "$BASE_SHA" ]; then
+          if [ "$(git ls-remote origin "refs/heads/$PR_BRANCH" | cut -f1)" != "$head" ]; then
+            git push --quiet --force origin "HEAD:refs/heads/$PR_BRANCH"
+          fi
+          count=$(git rev-list --count "$BASE_SHA..HEAD")
+          body=$(mktemp)
+          {
+            echo "Changes to \`$LOCAL_PATH\` replayed from $OTHER_REPO."
+            echo
+            echo "Merge with a merge commit or a rebase, not a squash. The next sync reads the \`Synced-From\` line of each commit."
+            echo
+            # A code block keeps GitHub from linking issue numbers and from notifying people named in the subjects.
+            echo '```'
+            git log --reverse --format='%h %an: %s' "$BASE_SHA..HEAD"
+            echo '```'
+            if [ -n "$CONFLICT" ]; then
+              echo
+              echo "The sync stopped at \`$CONFLICT\`, which does not apply on top of these. See the workflow run."
+            fi
+          } >"$body"
+          title="docs-sync: $count commit(s) from $OTHER_REPO"
+          number=$(gh pr list --head "$PR_BRANCH" --base "$BASE_BRANCH" --state open --json number --jq '.[0].number')
+          if [ -n "$number" ]; then
+            gh pr edit "$number" --title "$title" --body-file "$body" >/dev/null
+            echo "Updated pull request #$number"
+          else
+            gh pr create --base "$BASE_BRANCH" --head "$PR_BRANCH" --title "$title" --body-file "$body"
+          fi
+        fi
+        if [ -n "$CONFLICT" ]; then
+          echo "::error::$OTHER_REPO@$CONFLICT does not apply. Resolve it by hand, or run with mode reset-to-other."
+          exit 1
+        fi

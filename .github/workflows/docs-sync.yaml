@@ -1,0 +1,47 @@
+name: Docs sync
+
+on:
+  schedule:
+    - cron: "7,37 * * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: sync replays new commits. reset-to-other makes the folder identical to the docs repository's
+        type: choice
+        options: [sync, reset-to-other]
+        default: sync
+      other-ref:
+        description: With reset-to-other, the commit to reset to. Defaults to the tip of master
+        type: string
+        default: ""
+
+concurrency:
+  group: docs-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    name: Sync from altinn-studio-docs
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Sync
+        uses: ./.github/actions/docs-sync
+        with:
+          other-repo: Altinn/altinn-studio-docs
+          other-branch: master
+          other-path: content/altinn-studio/v9
+          local-path: docs/site
+          mode: ${{ inputs.mode || 'sync' }}
+          other-ref: ${{ inputs.other-ref }}
+          # This repository is a trial. Keep its commits from linking to, or notifying people in, the real repositories.
+          refs: neutralize

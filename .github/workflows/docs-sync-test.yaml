@@ -1,0 +1,29 @@
+name: Docs sync - Test
+
+on:
+  pull_request:
+    paths:
+      - ".github/actions/docs-sync/**"
+      - ".github/workflows/docs-sync-test.yaml"
+  push:
+    branches: [main]
+    paths:
+      - ".github/actions/docs-sync/**"
+      - ".github/workflows/docs-sync-test.yaml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test the sync script
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run tests
+        run: .github/actions/docs-sync/sync.test.sh
