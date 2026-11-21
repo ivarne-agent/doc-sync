@@ -17,18 +17,23 @@ The [workflow](.github/workflows/docs-sync.yaml) runs on a timer and calls the
 - The sync replays the other repository's commits after the cursor that touch the folder, one commit each, with a
   three-way merge. It keeps the author, the date and the message.
 - It skips a commit that carries `Synced-From` for this repository, since that change started here.
-- It opens a pull request from `docs-sync/incoming`, or updates the open one. A repeated run produces the same commit
-  ids, so an unchanged pull request is left alone.
+- It pushes the replayed commits straight to `main`. A repeated run produces the same commit ids.
 
-## Merging the pull request
+## How the sync gets past the branch rules
 
-Merge with a merge commit or a rebase. Squash merging is turned off in this repository, because a squash drops the
-`Synced-From` lines that the next sync reads.
+`main` only takes squash-merged pull requests, like a repository where a squash would drop the `Synced-From` lines.
+The sync pushes with a deploy key instead:
+
+- The key has write access to this repository only, and the ruleset for `main` lists deploy keys as a bypass actor.
+- The private key is a secret of the `docs-sync` environment, which only releases it to workflow runs on `main`. A
+  workflow on another branch cannot read it.
+- Without the key, the action can open a pull request instead (`push: pull-request`). That pull request must then be
+  merged with a merge commit or a rebase.
 
 ## When a commit does not apply
 
-The sync stops at the first commit that conflicts, the workflow run fails and names the commit, and the pull request
-holds the commits before it. Two ways out:
+The sync stops at the first commit that conflicts. It still pushes the commits before it, and the workflow run fails
+and names the commit. Two ways out:
 
 - Make the change by hand in a pull request, and end the commit message with the `Synced-From` line for that commit.
 - Run the workflow with mode `reset-to-other`. It makes the folder identical to the other repository's, and records

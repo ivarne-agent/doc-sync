@@ -78,7 +78,11 @@ fi
 
 # The cursor is the newest commit of the other repository that a Synced-From line in our history names.
 # Searching whole messages, not only trailers, also finds the lines when a merge has folded messages together.
-seen=$(git log --format=%B HEAD | grep -oE "Synced-From: ${OTHER_REPO//./\\.}@[0-9a-f]{40}" | sed 's/.*@//' | sort -u || true)
+# A reset starts over: only what we synced from the reset on counts, so a reset to an older commit moves the cursor back.
+last_reset=$(git log --topo-order -1 --format=%H --grep="^Synced-Reset: ${OTHER_REPO//./\\.}@" HEAD)
+range=HEAD
+if [ -n "$last_reset" ] && git rev-parse --verify --quiet "$last_reset^" >/dev/null; then range="$last_reset^..HEAD"; fi
+seen=$(git log --format=%B "$range" | grep -oE "Synced-From: ${OTHER_REPO//./\\.}@[0-9a-f]{40}" | sed 's/.*@//' | sort -u || true)
 [ -n "$seen" ] || die "no 'Synced-From: $OTHER_REPO@<sha>' in the history. Run once with mode reset-to-other"
 cursor=$(git rev-list --first-parent "$tip" | grep -m1 -Fx -f <(printf '%s\n' "$seen") || true)
 [ -n "$cursor" ] || die "none of the synced commits is on the first-parent history of $OTHER_BRANCH"

@@ -106,4 +106,13 @@ sync_into docs MODE=reset-to-other
 sync_into mono
 check "reset-to-other resolves a conflict" "$(out replayed) $(out conflict) $(same_trees)" "0  same"
 
+echo d1 >"$work/docs/content/v9/d1.md" && commit "$work/docs" writer "Docs d1"
+d1=$(git -C "$work/docs" rev-parse HEAD)
+echo d2 >"$work/docs/content/v9/d2.md" && commit "$work/docs" writer "Docs d2"
+sync_into mono
+sync_into mono MODE=reset-to-other OTHER_REF="$d1"
+check "reset to an older commit removes later changes" "$(ls "$work/mono/docs/site" | grep -c '^d[12].md$')" 1
+sync_into mono
+check "sync after a reset to an older commit replays from there" "$(out replayed) $(same_trees)" "1 same"
+
 [ "$failures" -eq 0 ] && echo "All tests passed" || { echo "$failures test(s) failed"; exit 1; }

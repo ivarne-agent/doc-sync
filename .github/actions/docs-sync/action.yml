@@ -24,6 +24,11 @@ inputs:
       What to do with issue references in replayed commit messages. qualify points them at the other repository,
       neutralize stops GitHub from linking them or notifying anyone, keep leaves them
     default: qualify
+  push:
+    description: >-
+      pull-request opens a pull request with the token. direct pushes to the checked out branch with the credentials
+      the checkout configured, for a credential that may bypass the branch rules
+    default: pull-request
   pr-branch:
     description: Branch the pull request is opened from
     default: docs-sync/incoming
@@ -52,7 +57,7 @@ runs:
         REFS: ${{ inputs.refs }}
       run: '"$GITHUB_ACTION_PATH/sync.sh"'
 
-    - name: Open or update the pull request
+    - name: Push, or open or update the pull request
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.token }}
@@ -62,9 +67,14 @@ runs:
         BASE_BRANCH: ${{ github.ref_name }}
         BASE_SHA: ${{ steps.sync.outputs.base }}
         CONFLICT: ${{ steps.sync.outputs.conflict }}
+        PUSH: ${{ inputs.push }}
       run: |
         head=$(git rev-parse HEAD)
-        if [ "$head" != "$BASE_SHA" ]; then
+        if [ "$head" != "$BASE_SHA" ] && [ "$PUSH" = "direct" ]; then
+          # Not forced: if the branch moved since the checkout, the push fails and the next run replays again.
+          git push --quiet origin "HEAD:refs/heads/$BASE_BRANCH"
+          echo "Pushed $(git rev-list --count "$BASE_SHA..HEAD") commit(s) to $BASE_BRANCH"
+        elif [ "$head" != "$BASE_SHA" ]; then
           if [ "$(git ls-remote origin "refs/heads/$PR_BRANCH" | cut -f1)" != "$head" ]; then
             git push --quiet --force origin "HEAD:refs/heads/$PR_BRANCH"
           fi

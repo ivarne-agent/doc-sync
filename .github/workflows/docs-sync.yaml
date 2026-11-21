@@ -20,19 +20,22 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   sync:
     name: Sync from altinn-studio-docs
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # The environment only releases the deploy key to runs on main.
+    environment: docs-sync
     steps:
       - name: Check out code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          # The deploy key is on the bypass list of the ruleset for main, so the sync can push there directly.
+          ssh-key: ${{ secrets.DOCS_SYNC_DEPLOY_KEY }}
 
       - name: Sync
         uses: ./.github/actions/docs-sync
@@ -41,6 +44,7 @@ jobs:
           other-branch: master
           other-path: content/altinn-studio/v9
           local-path: docs/site
+          push: direct
           mode: ${{ inputs.mode || 'sync' }}
           other-ref: ${{ inputs.other-ref }}
           # This repository is a trial. Keep its commits from linking to, or notifying people in, the real repositories.
