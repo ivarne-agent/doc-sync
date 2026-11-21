@@ -27,8 +27,8 @@ The sync pushes with a deploy key instead:
 - The key has write access to this repository only, and the ruleset for `main` lists deploy keys as a bypass actor.
 - The private key is a secret of the `docs-sync` environment, which only releases it to workflow runs on `main`. A
   workflow on another branch cannot read it.
-- The workflow pushes as a GitHub App instead when the variable `DOCS_SYNC_APP_CLIENT_ID` is set. The app needs
-  write access to contents, its private key as the environment secret `DOCS_SYNC_APP_PRIVATE_KEY`, and a place on
+- The workflow pushes as a GitHub App instead when the variable `DOC_SYNC_APP_CLIENT_ID` is set. The app needs
+  write access to contents, its private key as the environment secret `DOC_SYNC_APP_PRIVATE_KEY`, and a place on
   the ruleset's bypass list.
 - Without either, the action can open a pull request instead (`push: pull-request`). That pull request must then be
   merged with a merge commit or a rebase.
