@@ -102,7 +102,7 @@ for c in $(git rev-list --reverse --first-parent "$start..$tip" -- "$OTHER_PATH"
   parent=$(git rev-parse --verify --quiet "$c^1" || git hash-object -t tree /dev/null)
   git diff --binary --full-index --relative="$OTHER_PATH/" "$parent" "$c" -- "$OTHER_PATH" >"$patch"
   [ -s "$patch" ] || continue
-  if ! git apply --3way --whitespace=nowarn --directory="$LOCAL_PATH" "$patch"; then
+  if ! git apply --quiet --3way --whitespace=nowarn --directory="$LOCAL_PATH" "$patch"; then
     git reset --quiet --hard
     git clean -fdq -- "$LOCAL_PATH"
     conflict=$c
