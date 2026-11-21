@@ -60,7 +60,8 @@ output tip "$tip"
 
 if [ "$MODE" = "reset-to-other" ]; then
   sha=$(git rev-parse --verify --quiet "${OTHER_REF:-$tip}^{commit}") || die "unknown commit '$OTHER_REF'"
-  git rev-list --first-parent "$tip" | grep -qx "$sha" || die "$sha is not on the first-parent history of $OTHER_BRANCH"
+  # No grep -q: it would close the pipe early and fail the pipeline.
+  [ -n "$(git rev-list --first-parent "$tip" | grep -x "$sha" || true)" ] || die "$sha is not on the first-parent history of $OTHER_BRANCH"
   git rm -r --quiet --ignore-unmatch -- "$LOCAL_PATH"
   git clean -fdq -- "$LOCAL_PATH"
   git read-tree -u --prefix="$LOCAL_PATH/" "$sha:$OTHER_PATH"
