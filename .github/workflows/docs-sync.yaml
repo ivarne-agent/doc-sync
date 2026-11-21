@@ -27,15 +27,26 @@ jobs:
     name: Sync from altinn-studio-docs
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # The environment only releases the deploy key to runs on main.
+    # The environment only releases the credential to runs on main.
     environment: docs-sync
     steps:
+      # The sync pushes to main as a GitHub App when DOCS_SYNC_APP_CLIENT_ID is set, and with the deploy key otherwise.
+      # Whichever it uses must be on the bypass list of the ruleset for main.
+      - name: Create an app token
+        id: app
+        if: ${{ vars.DOCS_SYNC_APP_CLIENT_ID != '' }}
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        with:
+          client-id: ${{ vars.DOCS_SYNC_APP_CLIENT_ID }}
+          private-key: ${{ secrets.DOCS_SYNC_APP_PRIVATE_KEY }}
+          permission-contents: write
+
       - name: Check out code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          # The deploy key is on the bypass list of the ruleset for main, so the sync can push there directly.
-          ssh-key: ${{ secrets.DOCS_SYNC_DEPLOY_KEY }}
+          token: ${{ steps.app.outputs.token || github.token }}
+          ssh-key: ${{ vars.DOCS_SYNC_APP_CLIENT_ID == '' && secrets.DOCS_SYNC_DEPLOY_KEY || '' }}
 
       - name: Sync
         uses: ./.github/actions/docs-sync
